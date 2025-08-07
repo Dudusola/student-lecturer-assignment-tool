@@ -1,20 +1,7 @@
 [theme]
-primaryColor = "#3949ab"
-backgroundColor = "#f7fafd"
-secondaryBackgroundColor = "#e3eafc"
-textColor = "#1a237e"
+primaryColor = "#636EFA"
+backgroundColor = "#F8F9FA"
+secondaryBackgroundColor = "#EDEEF0"
+textColor = "#262730"
 font = "sans serif"
-
-[theme.light]
-primaryColor = "#3949ab"
-backgroundColor = "#f7fafd"
-secondaryBackgroundColor = "#e3eafc"
-textColor = "#1a237e"
-font = "sans serif"
-
-[theme.dark]
-primaryColor = "#90caf9"
-backgroundColor = "#181a1b"
-secondaryBackgroundColor = "#23272f"
-textColor = "#e3eafc"
-font = "sans serif"
+favicon = "logo.png"

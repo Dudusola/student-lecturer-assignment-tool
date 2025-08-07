@@ -1,5 +1,17 @@
 import streamlit as st
 import pandas as pd
+st.title("")
+st.markdown("""
+    <style>
+    .block-container > img:first-child {
+        margin-top: 2.5rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+st.image("logo.png", width=110)
+st.title("Student–Lecturer Assignment Tool")
+st.caption("Upload your data, configure assignment settings, and generate assignment reports.")
+st.markdown("---")
 from sample_xlsx import generate_xlsx_template_student, generate_xlsx_template_lecturer
 from sample_docx import generate_docx_template_student, generate_docx_template_lecturer
 from sample_csv import generate_csv_template_student, generate_csv_template_lecturer
@@ -8,30 +20,25 @@ from utils.reports import generate_report
 from utils.assigner import assign_students
 
 st.set_page_config(page_title="Student–Lecturer Assignment Tool", layout="centered")
-st.title("Student–Lecturer Assignment Tool")
-st.caption("Upload your data, configure assignment settings, and generate assignment reports.")
-st.markdown("---")
 
 
 # Accessibility: Larger font and high-contrast for headers
 st.markdown('<h2 style="font-size:2rem;color:#1a237e;">Upload Data Files</h2>', unsafe_allow_html=True)
 st.markdown('<span style="font-size:1.1rem;">Upload your student and lecturer data files below. Supported formats: CSV, Excel, or Word.</span>', unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("Student Data File")
-    student_file = st.file_uploader(
-        "Choose a student file",
-        type=["csv", "xlsx", "docx"],
-        help="Must include columns: Name, Matric Number. Optionally: Field, Department, or Specialization."
-    )
-with col2:
-    st.subheader("Lecturer Data File")
-    lecturer_file = st.file_uploader(
-        "Choose a lecturer file",
-        type=["csv", "xlsx", "docx"],
-        help="Must include column: Name. Optionally: Field, Specialization, Department, Max_Students."
-    )
+# Responsive: Stack uploaders vertically for mobile
+st.subheader("Student Data File")
+student_file = st.file_uploader(
+    "Choose a student file",
+    type=["csv", "xlsx", "docx"],
+    help="Must include columns: Name, Matric Number. Optionally: Field, Department, or Specialization."
+)
+st.subheader("Lecturer Data File")
+lecturer_file = st.file_uploader(
+    "Choose a lecturer file",
+    type=["csv", "xlsx", "docx"],
+    help="Must include column: Name. Optionally: Field, Specialization, Department, Max_Students."
+)
 
 with st.expander("File Format Examples and Tips"):
     st.markdown("""
@@ -283,18 +290,28 @@ st.markdown(
     <style>
     /* Make tables scrollable on mobile */
     .css-1lcbmhc, .stDataFrame { overflow-x: auto; }
-    /* Button styling */
+    /* Button styling (Generate Assignment and others) */
     .stButton>button {
         font-size: 1.1rem;
         padding: 0.6em 1.5em;
         border-radius: 6px;
-        background-color: #1a237e;
+        background-color: #636EFA;
         color: #fff;
         border: none;
         transition: background 0.2s;
+        box-shadow: 0 2px 8px rgba(99,110,234,0.08);
     }
     .stButton>button:hover {
-        background-color: #3949ab;
+        background-color: #4a5bdc;
+    }
+    /* Multiselect (format selection) styling */
+    .stMultiSelect [data-baseweb="tag"] {
+        background-color: #636EFA !important;
+        color: #fff !important;
+        border-radius: 4px !important;
+    }
+    .stMultiSelect [data-baseweb="tag"]:hover {
+        background-color: #4a5bdc !important;
     }
     /* Input styling */
     .stTextInput>div>div>input, .stNumberInput>div>div>input {
@@ -307,23 +324,23 @@ st.markdown(
     h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         font-family: 'Segoe UI', 'Arial', sans-serif;
         font-weight: 700;
-        color: #1a237e;
+        color: #636EFA;
     }
     /* Headings: clearer color in dark mode */
     @media (prefers-color-scheme: dark) {
         h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-            color: #90caf9 !important;
+            color: #aab6fe !important;
         }
     }
     /* Section spacing */
     .block-container {
-        padding-top: 1.5rem;
+        padding-top: 2.5rem; /* Increased top padding so title is not cut off */
         padding-bottom: 1.5rem;
     }
     /* Responsive font for mobile */
     @media (max-width: 600px) {
         h1, h2, h3 { font-size: 6vw; }
-        .block-container { padding: 0.5rem 0.5rem; }
+        .block-container { padding: 1.5rem 0.5rem 0.5rem 0.5rem; }
     }
     </style>
     ''',
