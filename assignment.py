@@ -1,13 +1,22 @@
+
 import streamlit as st
 import pandas as pd
-st.title("")
-st.markdown("""
+
+# Set favicon using HTML injection (only once)
+st.markdown("<link rel='icon' href='favicon.ico'>", unsafe_allow_html=True)
+
+# Custom CSS for spacing and style (only once)
+st.markdown(
+    """
     <style>
     .block-container > img:first-child {
         margin-top: 2.5rem;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+)
+
 st.image("logo.png", width=110)
 st.title("Student–Lecturer Assignment Tool")
 st.caption("Upload your data, configure assignment settings, and generate assignment reports.")
@@ -20,7 +29,6 @@ from utils.reports import generate_report
 from utils.assigner import assign_students
 
 st.set_page_config(page_title="Student–Lecturer Assignment Tool", layout="centered")
-
 
 # Accessibility: Larger font and high-contrast for headers
 st.markdown('<h2 style="font-size:2rem;color:#1a237e;">Upload Data Files</h2>', unsafe_allow_html=True)
