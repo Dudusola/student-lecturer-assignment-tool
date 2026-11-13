@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-13T21:00:00Z",
+  "title": "Design System: Supervision List",
+  "extensions": {
+    "colorMeta": {
+      "paper": { "role": "neutral", "displayName": "Newsprint", "canonical": "oklch(91.5% 0.012 95)", "tonalRamp": ["oklch(15% 0.012 95)", "oklch(27% 0.012 95)", "oklch(39% 0.012 95)", "oklch(51% 0.012 95)", "oklch(63% 0.012 95)", "oklch(75% 0.012 95)", "oklch(87% 0.012 95)", "oklch(95% 0.012 95)"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(19% 0.01 80)", "tonalRamp": ["oklch(15% 0.01 80)", "oklch(19% 0.01 80)", "oklch(30% 0.01 80)", "oklch(38% 0.01 80)", "oklch(52% 0.01 80)", "oklch(66% 0.01 80)", "oklch(80% 0.01 80)", "oklch(94% 0.01 80)"] },
+      "press-green": { "role": "primary", "displayName": "Press Green", "canonical": "oklch(38% 0.08 160)", "tonalRamp": ["oklch(15% 0.08 160)", "oklch(25% 0.08 160)", "oklch(30% 0.07 160)", "oklch(38% 0.08 160)", "oklch(50% 0.08 160)", "oklch(65% 0.07 160)", "oklch(80% 0.05 160)", "oklch(95% 0.02 160)"] },
+      "biro": { "role": "secondary", "displayName": "Biro", "canonical": "oklch(45% 0.2 268)", "tonalRamp": ["oklch(15% 0.1 268)", "oklch(25% 0.15 268)", "oklch(35% 0.18 268)", "oklch(45% 0.2 268)", "oklch(57% 0.17 268)", "oklch(70% 0.12 268)", "oklch(86% 0.06 268)", "oklch(95% 0.02 268)"] },
+      "error": { "role": "error", "displayName": "Press Red", "canonical": "oklch(42% 0.15 28)" }
+    },
+    "typographyMeta": {
+      "masthead": { "displayName": "Masthead", "purpose": "The page title only." },
+      "heading": { "displayName": "Heading", "purpose": "Section heads, lecturer names, slot headings." },
+      "label": { "displayName": "Label", "purpose": "Field labels, counts, matric numbers, dateline." },
+      "body": { "displayName": "Body", "purpose": "Names, prose, field lines (italic)." }
+    },
+    "shadows": [
+      { "name": "publish-lift", "value": "0 1px 0 var(--color-accent-ink), 0 6px 14px -8px oklch(38% 0.08 160 / 0.6)", "purpose": "Lifts the one primary action." },
+      { "name": "press-bar", "value": "0 -8px 24px -16px var(--color-shadow)", "purpose": "Separates the fixed download bar from the list." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "All state transitions." },
+      { "name": "ink-in", "value": "240ms ease-out, 35ms stagger, opacity + 6px rise", "purpose": "Columns appear once when the list is published; never on edits." }
+    ],
+    "breakpoints": [
+      { "name": "two-column-desk", "value": "960px" },
+      { "name": "single-column", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Publish Button",
+      "kind": "button",
+      "refersTo": "button-publish",
+      "description": "The single primary action on the page.",
+      "html": "<button class=\"ds-publish\">Publish the list</button>",
+      "css": ".ds-publish { min-height: 3.25rem; padding: 0.75rem 1.5rem; background: var(--color-accent); color: var(--color-on-accent); border: 0; border-radius: 2px; font: 800 1.25rem/1 var(--font-display); letter-spacing: -0.01em; cursor: pointer; transition: background-color 150ms cubic-bezier(0.16,1,0.3,1); } .ds-publish:hover { background: var(--color-accent-ink); } .ds-publish:focus-visible { outline: 2px solid var(--color-biro); outline-offset: 2px; } .ds-publish:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Press Bar Button",
+      "kind": "button",
+      "refersTo": "button-press",
+      "description": "Download actions on the ink press bar.",
+      "html": "<div style=\"background:var(--color-ink);padding:12px\"><button class=\"ds-press-btn\">Excel</button></div>",
+      "css": ".ds-press-btn { min-height: 2.5rem; padding: 0 1rem; background: transparent; color: var(--color-paper); border: 1px solid var(--color-paper-3); border-radius: 2px; font: 800 0.9375rem/1 var(--font-display); cursor: pointer; } .ds-press-btn:hover { background: var(--color-paper); color: var(--color-ink); } .ds-press-btn:focus-visible { outline: 2px solid var(--color-paper); outline-offset: 2px; }"
+    },
+    {
+      "name": "Drop Zone",
+      "kind": "input",
+      "refersTo": "drop-zone",
+      "description": "Where a student or lecturer file is dropped.",
+      "html": "<label class=\"ds-drop\"><strong>Drop the student list</strong> or choose a file<span>CSV, Excel or a Word table</span></label>",
+      "css": ".ds-drop { display: grid; gap: 4px; place-content: center; text-align: center; min-height: 6.5rem; padding: 1rem; background: var(--color-paper-2); border: 1px dashed var(--color-ink-3); font: 400 1.0625rem/1.4 var(--font-body); cursor: pointer; } .ds-drop strong { font-family: var(--font-display); font-weight: 800; } .ds-drop span { font-size: 0.8125rem; color: var(--color-ink-2); } .ds-drop:hover { border-color: var(--color-biro); }"
+    },
+    {
+      "name": "Lecturer Column",
+      "kind": "custom",
+      "description": "One lecturer: name, specialization, exact load cells, numbered names with biro marks.",
+      "html": "<article class=\"ds-lect\"><h3>Dr. Grace Adebayo</h3><p class=\"ds-f\">Artificial Intelligence, Machine Learning</p><div class=\"ds-load\"><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i></i><i></i> 3/5</div><ol><li>Ada Okafor <small>CSC/21000</small></li><li class=\"weak\"><span>Bola Eze</span> <small>CSC/21037</small></li></ol></article>",
+      "css": ".ds-lect { border-top: 3px solid var(--color-ink); padding-top: 8px; font: 400 1.0625rem/1.5 var(--font-body); color: var(--color-ink); } .ds-lect h3 { font: 800 1.25rem/1.15 var(--font-display); margin: 0; } .ds-f { font-style: italic; font-size: 0.9375rem; color: var(--color-ink-2); margin: 2px 0 6px; } .ds-load { display: flex; gap: 2px; align-items: center; font: 600 0.8125rem/1 var(--font-display); } .ds-load i { width: 14px; height: 11px; border: 1px solid var(--color-ink); } .ds-load i.on { background: var(--color-ink); } .ds-lect ol { padding-left: 1.4rem; margin: 8px 0 0; } .ds-lect li { border-bottom: 1px dotted var(--color-rule-soft); padding: 4px 0; } .ds-lect small { font: 400 0.8125rem/1 var(--font-display); color: var(--color-ink-2); } .ds-lect li.weak span { border: 1.5px solid var(--color-biro); border-radius: 62% 38% 55% 45% / 58% 46% 54% 42%; padding: 0 0.45em; display: inline-block; transform: rotate(-2deg); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Admission List",
+    "overview": "The result is published like a newspaper allocation supplement: a masthead in type, equal ruled columns, and a coordinator's blue biro marking what needs a look. Paper and ink carry the hierarchy; green is the press, blue is the pen.",
+    "keyCharacteristics": ["Newsprint ground, near-black ink", "Libre Franklin gothic + Spectral serif", "Equal-scale lecturer columns with exact load cells", "Biro marks for attention and hand edits", "One green action per screen"],
+    "rules": [
+      { "name": "The Two Inks Rule", "body": "Green is the press (one action), blue is the pen (attention and edits). Neither decorates.", "section": "colors" },
+      { "name": "The Scale-Only Rule", "body": "Hierarchy comes from type size and weight; no eyebrows, badges or cards.", "section": "typography" }
+    ],
+    "dos": ["Do keep one green action per screen.", "Do mark attention only with biro circle, underline or numeral.", "Do keep lecturer columns at one scale."],
+    "donts": ["Don't add cards, badges or coloured side borders.", "Don't use ink-muted for text.", "Don't replay entrance motion on edits."]
+  }
+}
