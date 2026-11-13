@@ -15,7 +15,7 @@ _FIELDS = ["Artificial Intelligence", "AI", "Machine Learning", "Cyber Security"
 
 def sample_students(n=40) -> pd.DataFrame:
     return pd.DataFrame({
-        "Name": [f"{_FIRST[i % 20]} {_LAST[(i * 7) % 10]}" for i in range(n)],
+        "Name": [f"{_FIRST[i % 20]} {_LAST[(i // 20 + i * 3) % 10]}" for i in range(n)],  # unique for n <= 200
         "Matric Number": [f"CSC/{21000 + i * 37}" for i in range(n)],
         "Field": [_FIELDS[(i * 5) % len(_FIELDS)] for i in range(n)],
     })

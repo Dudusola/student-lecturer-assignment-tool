@@ -1,7 +1,7 @@
 # Student–Lecturer Assignment Tool
 
-A Streamlit app that assigns students to lecturers (supervisors) fairly and by field, in three steps:
-**add your lists → choose a method → review, adjust and export.**
+A web app that turns a student list and a lecturer list into a fair, field-matched supervision list,
+set like a published allocation list: **drop two files → publish → fix anything circled → export.**
 
 ## Features
 
@@ -15,9 +15,10 @@ A Streamlit app that assigns students to lecturers (supervisors) fairly and by f
 - **Random (balanced):** even random split when fields don't matter.
 - **Limits:** per-lecturer `Max_Students` from the file, a global maximum, or an automatic even split.
   Optional *minimum match* leaves a student unassigned rather than give a poor match.
-- **Review & edit:** every student gets a match score (Strong / Partial / Weak); weak and unassigned rows are
-  listed first, and you can change any lecturer from a dropdown. Scores, workload and exports update instantly.
-- **Exports:** Excel (with workload sheet), PDF and Word (grouped by lecturer), CSV.
+- **Review & edit:** every lecturer is a column with an exact load bar; weak matches are circled, partial ones
+  underlined. Click a name to move that student (choices ranked by match, with each lecturer's load); click a
+  lecturer to focus their column; search by name or matric number.
+- **Exports:** Excel (with workload sheet), PDF and Word (grouped by lecturer), CSV, or print the page directly.
 - **Try it instantly:** built-in sample data and downloadable templates.
 
 ## Run locally
@@ -25,8 +26,11 @@ A Streamlit app that assigns students to lecturers (supervisors) fairly and by f
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
-.venv/Scripts/streamlit run assignment.py
+.venv/Scripts/uvicorn app:app --port 8000
 ```
+
+Then open http://localhost:8000. Deploys anywhere that runs a Python web service (Render, Railway, Fly.io):
+start command `uvicorn app:app --host 0.0.0.0 --port $PORT`.
 
 Tests: `.venv/Scripts/python -m pytest -q`
 
@@ -36,12 +40,15 @@ Tests: `.venv/Scripts/python -m pytest -q`
 - Data is processed in memory for the session only; nothing is written to disk.
 - Exported CSV/Excel cells that start with `= + - @` are escaped to block spreadsheet formula injection.
 - User data is never rendered as HTML; PDF text is escaped.
-- XSRF protection on, stack traces hidden from users, usage telemetry off (`.streamlit/config.toml`).
+- The server is stateless: the browser holds the data; request bodies are size-capped and validated (Pydantic).
+- Strict Content-Security-Policy (no inline scripts), `nosniff`, no referrer, `no-store` on API responses,
+  API docs disabled.
 
 ## Project layout
 
 ```
-assignment.py          Streamlit UI
+app.py                 FastAPI server: JSON API + static frontend
+web/                   frontend (index.html, styles.css, tokens.css, app.js)
 utils/file_reader.py   safe file parsing + column detection
 utils/matcher.py       field similarity (TF-IDF + acronym expansion)
 utils/assigner.py      optimal assignment with capacities

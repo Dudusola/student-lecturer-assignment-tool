@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Supervision List · Student–Lecturer Assignment</title>
+  <meta name="description" content="Turn a student list and a lecturer list into a fair, field-matched supervision list.">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800;900&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#rules">Skip to the rules</a>
+
+  <header class="mast">
+    <p class="dateline"><span>Student–Lecturer Assignment Tool</span><span id="today"></span></p>
+    <h1>Supervision List</h1>
+    <p class="standfirst">Drop in your students and your lecturers. The list sets itself by field, keeps every workload fair, and circles anything you should look at before it goes out.</p>
+  </header>
+
+  <main>
+    <section class="desk" aria-label="Your lists and the rules">
+      <div class="slot" data-kind="students">
+        <h2>Students</h2>
+        <label class="drop">
+          <input type="file" accept=".csv,.xlsx,.docx" class="visually-hidden">
+          <span class="drop-main"><strong>Drop the student list</strong> or choose a file</span>
+          <span class="drop-hint">CSV, Excel or a Word table · needs a name and matric number</span>
+        </label>
+        <div class="loaded" hidden>
+          <p class="loaded-count"></p>
+          <div class="map"></div>
+          <button type="button" class="link change">Use a different file</button>
+        </div>
+        <p class="error" role="alert"></p>
+      </div>
+
+      <div class="slot" data-kind="lecturers">
+        <h2>Lecturers</h2>
+        <label class="drop">
+          <input type="file" accept=".csv,.xlsx,.docx" class="visually-hidden">
+          <span class="drop-main"><strong>Drop the lecturer list</strong> or choose a file</span>
+          <span class="drop-hint">Specialization and Max_Students columns are optional</span>
+        </label>
+        <div class="loaded" hidden>
+          <p class="loaded-count"></p>
+          <div class="map"></div>
+          <button type="button" class="link change">Use a different file</button>
+        </div>
+        <p class="error" role="alert"></p>
+      </div>
+
+      <form class="rules" id="rules">
+        <h2>Rules</h2>
+        <fieldset class="method">
+          <legend class="visually-hidden">How to match</legend>
+          <label><input type="radio" name="mode" value="smart" checked> <span><strong>Match by field</strong> closest specialization, fair loads</span></label>
+          <label><input type="radio" name="mode" value="random"> <span><strong>Random</strong> even split, ignores fields</span></label>
+        </fieldset>
+        <label class="field">
+          <span>Most students per lecturer</span>
+          <input type="number" name="global_max" min="1" max="2000" inputmode="numeric" placeholder="Even split">
+          <small>Limits in the lecturer file come first.</small>
+        </label>
+        <label class="field" id="min-row">
+          <span>Leave unplaced if the match is below <output id="min-out">0%</output></span>
+          <input type="range" name="min_score" min="0" max="100" step="5" value="0">
+        </label>
+        <button type="submit" class="publish" disabled>Publish the list</button>
+        <p class="rules-note" id="rules-note" aria-live="polite">Add both lists to publish.</p>
+      </form>
+    </section>
+
+    <p class="desk-extras">
+      <button type="button" class="link" id="sample">Try it with sample lists</button>
+      <span aria-hidden="true">·</span>
+      <span>Templates: students
+        <a href="/api/template/students.csv">CSV</a> <a href="/api/template/students.xlsx">Excel</a> <a href="/api/template/students.docx">Word</a>;
+        lecturers
+        <a href="/api/template/lecturers.csv">CSV</a> <a href="/api/template/lecturers.xlsx">Excel</a> <a href="/api/template/lecturers.docx">Word</a></span>
+    </p>
+
+    <section class="notice" id="notice" aria-labelledby="notice-h">
+      <h2 id="notice-h">How the list is set</h2>
+      <div class="notice-body">
+        <p><strong>Fields are read the way people write them.</strong> “AI”, “Artificial Intelligence” and a misspelt “Machine learnig” all find the right lecturer. A lecturer can list several specializations separated by commas.</p>
+        <p><strong>The whole list is solved at once.</strong> Every student goes to the closest-matching lecturer that still has room, and loads stay as even as the limits allow. Nobody is placed first-come, first-served.</p>
+        <p><strong>You have the last word.</strong> Weak matches are circled in blue biro. Click any name to move that student; the list, the counts and every export follow. Files are read in memory and never stored.</p>
+      </div>
+    </section>
+
+    <section class="paper" id="paper" hidden aria-labelledby="paper-h">
+      <div class="paper-head">
+        <div>
+          <h2 id="paper-h">The list</h2>
+          <p class="summary" id="summary"></p>
+        </div>
+        <label class="find">
+          <span class="visually-hidden">Find a student or lecturer</span>
+          <input type="search" id="find" placeholder="Find a name or matric no." autocomplete="off">
+        </label>
+      </div>
+      <p class="key"><span class="k-weak">circled</span> weak match · <span class="k-partial">blue number</span> partial match · <span class="k-moved">underlined</span> moved by you · click a lecturer to focus, a name to move</p>
+      <div class="columns" id="columns"></div>
+    </section>
+  </main>
+
+  <div class="press" id="press" hidden>
+    <p class="press-counts" id="press-counts"></p>
+    <div class="press-actions">
+      <span class="press-label">Download</span>
+      <button type="button" class="btn" data-export="Excel">Excel</button>
+      <button type="button" class="btn" data-export="PDF">PDF</button>
+      <button type="button" class="btn" data-export="Word">Word</button>
+      <button type="button" class="btn" data-export="CSV">CSV</button>
+      <button type="button" class="btn" id="print">Print</button>
+    </div>
+  </div>
+
+  <footer class="colophon">
+    <p>Set by field similarity (character n-grams with acronym expansion) and solved as one optimal assignment. Strong ≥ 75%, partial ≥ 40%. Your files are processed in memory and are never kept.</p>
+  </footer>
+</body>
+</html>
