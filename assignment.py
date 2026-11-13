@@ -1,356 +1,293 @@
+from pathlib import Path
 
 import streamlit as st
-import pandas as pd
 
-# Set favicon using HTML injection (only once)
-st.markdown("<link rel='icon' href='favicon.ico'>", unsafe_allow_html=True)
+st.set_page_config(page_title="Student–Lecturer Assignment", page_icon=str(Path(__file__).with_name("favicon.ico")),
+                   layout="wide")
 
-# Custom CSS for spacing and style (only once)
-st.markdown(
-    """
-    <style>
-    .block-container > img:first-child {
-        margin-top: 2.5rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+import pandas as pd  # noqa: E402
 
-st.image("logo.png", width=110)
-st.title("Student–Lecturer Assignment Tool")
-st.caption("Upload your data, configure assignment settings, and generate assignment reports.")
-st.markdown("---")
-from sample_xlsx import generate_xlsx_template_student, generate_xlsx_template_lecturer
-from sample_docx import generate_docx_template_student, generate_docx_template_lecturer
-from sample_csv import generate_csv_template_student, generate_csv_template_lecturer
-from utils.file_reader import read_uploaded_file
-from utils.reports import generate_report
-from utils.assigner import assign_students
+from utils import reports, samples  # noqa: E402
+from utils.assigner import PARTIAL, STRONG, assign, capacities, rescore  # noqa: E402
+from utils.file_reader import DataError, detect_column, parse_capacity, read_table  # noqa: E402
 
-st.set_page_config(page_title="Student–Lecturer Assignment Tool", layout="centered")
+NONE = "— none —"
+ss = st.session_state
 
-# Accessibility: Larger font and high-contrast for headers
-st.markdown('<h2 style="font-size:2rem;color:#1a237e;">Upload Data Files</h2>', unsafe_allow_html=True)
-st.markdown('<span style="font-size:1.1rem;">Upload your student and lecturer data files below. Supported formats: CSV, Excel, or Word.</span>', unsafe_allow_html=True)
-
-# Responsive: Stack uploaders vertically for mobile
-st.subheader("Student Data File")
-student_file = st.file_uploader(
-    "Choose a student file",
-    type=["csv", "xlsx", "docx"],
-    help="Must include columns: Name, Matric Number. Optionally: Field, Department, or Specialization."
-)
-st.subheader("Lecturer Data File")
-lecturer_file = st.file_uploader(
-    "Choose a lecturer file",
-    type=["csv", "xlsx", "docx"],
-    help="Must include column: Name. Optionally: Field, Specialization, Department, Max_Students."
-)
-
-with st.expander("File Format Examples and Tips"):
-    st.markdown("""
-    **Student File Example:**
-    | Name      | Matric Number | Field                  |
-    |-----------|---------------|------------------------|
-    | John Doe  | CSC/1234/21   | Artificial Intelligence|
-    - Required: Name, Matric Number
-    - Optional: Field, Department, or Specialization (any of these will work)
-
-    **Lecturer File Example:**
-    | Name      | Max_Students | Field                  |
-    |-----------|--------------|------------------------|
-    | Dr. Smith | 8            | Artificial Intelligence|
-    - Required: Name
-    - Optional: Field, Specialization, Department, Max_Students (any of these will work)
-    """)
-
-with st.expander("Download Sample Templates"):
-    colA, colB = st.columns(2)
-    with colA:
-        st.subheader("Student Templates")
-        st.download_button("CSV", generate_csv_template_student(), "student_template.csv")
-        st.download_button("Excel", generate_xlsx_template_student(), "student_template.xlsx")
-        st.download_button("Word", generate_docx_template_student(), "student_template.docx")
-    with colB:
-        st.subheader("Lecturer Templates")
-        st.download_button("CSV", generate_csv_template_lecturer(), "lecturer_template.csv")
-        st.download_button("Excel", generate_xlsx_template_lecturer(), "lecturer_template.xlsx")
-        st.download_button("Word", generate_docx_template_lecturer(), "lecturer_template.docx")
-st.markdown("---")
+st.html("""<style>
+.block-container { max-width: 1180px; padding-top: 2.2rem; }
+.step { display:inline-flex; align-items:center; justify-content:center; width:1.7rem; height:1.7rem;
+        border-radius:50%; background: var(--primary-color, #1E3A8A); color:#fff; font-size:.9rem;
+        font-weight:700; margin-right:.55rem; vertical-align: .15rem; }
+@media (max-width: 640px) { h1 { font-size: 1.9rem !important; } }
+</style>""")
 
 
-# Assignment Settings
-st.markdown('<h2 style="font-size:2rem;color:#1a237e;">Assignment Settings</h2>', unsafe_allow_html=True)
-assignment_strategy = st.radio(
-    "Assignment Method",
-    ["Random Assignment", "Field-Based Assignment"],
-    key="assignment_method",
-    help="Choose how students are assigned to lecturers."
-)
-if assignment_strategy == "Field-Based Assignment":
-    st.info("Both files must contain a 'Field', 'Department', or 'Specialization' column for field-based assignment.")
-use_global_max = st.checkbox("Set a global maximum number of students per lecturer", key="global_max_checkbox")
-if use_global_max:
-    max_students = st.number_input(
-        "Maximum students per lecturer",
-        min_value=1,
-        step=1,
-        help="Overrides individual lecturer limits unless specified in the file."
-    )
-else:
-    max_students = None
-st.markdown("---")
-
-# User Customization: Column Mapping
-st.markdown('<h2 style="font-size:1.3rem;color:#1565c0;">Column Mapping (Advanced)</h2>', unsafe_allow_html=True)
-with st.expander("Customize column names for your files (optional)"):
-    st.markdown("If your files use different column names, map them here. Leave blank to use the default.")
-    col_map = {}
-    col_map['student_name'] = st.text_input("Student Name column", value="name", help="Column in student file for student names.", key="student_name_col")
-    col_map['matric_number'] = st.text_input("Matric Number column", value="matric number", help="Column in student file for matric numbers.", key="matric_col")
-    col_map['student_field'] = st.text_input("Student Field column", value="field", help="Column in student file for field/department/specialization.", key="student_field_col")
-    col_map['lecturer_name'] = st.text_input("Lecturer Name column", value="name", help="Column in lecturer file for lecturer names.", key="lecturer_name_col")
-    col_map['lecturer_field'] = st.text_input("Lecturer Field column", value="field", help="Column in lecturer file for field/department/specialization.", key="lecturer_field_col")
-    col_map['max_students'] = st.text_input("Lecturer Max Students column", value="max_students", help="Column in lecturer file for max students.", key="max_students_col")
+def step(n, title):
+    st.markdown(f'<span class="step">{n}</span> <span style="font-size:1.35rem;font-weight:700">{title}</span>',
+                unsafe_allow_html=True)  # constant text only, never user data
 
 
-# Read Data (with flexible column mapping) and show validation feedback
-student_df = None
-lecturer_df = None
-validation_issues = []
-error_log = []
-if student_file:
-    try:
-        student_df = read_uploaded_file(student_file)
-        # Map columns according to user mapping
-        for key, default in zip(['student_name', 'matric_number', 'student_field'], ['name', 'matric number', 'field']):
-            if col_map[key] != default and col_map[key] in student_df.columns:
-                student_df[default] = student_df[col_map[key]]
-        if "field" not in student_df.columns:
-            for alt in [col_map['student_field'], "department", "specialization"]:
-                if alt in student_df.columns:
-                    student_df["field"] = student_df[alt]
-        required_cols = ["name", "matric number"]
-        missing_cols = [col for col in required_cols if col not in student_df.columns]
-        if missing_cols:
-            validation_issues.append(f"Student file is missing required columns: {', '.join(missing_cols)}.")
-            student_df = None
-        elif student_df.duplicated(['matric number']).any():
-            validation_issues.append("Duplicate Matric Numbers found in student file.")
-        elif student_df.empty:
-            validation_issues.append("Student file is empty.")
-            student_df = None
-    except Exception as e:
-        validation_issues.append(f"Error reading student file: {e}")
-        error_log.append(f"Student file error: {e}")
-        student_df = None
-if lecturer_file:
-    try:
-        lecturer_df = read_uploaded_file(lecturer_file)
-        for key, default in zip(['lecturer_name', 'lecturer_field', 'max_students'], ['name', 'field', 'max_students']):
-            if col_map[key] != default and col_map[key] in lecturer_df.columns:
-                lecturer_df[default] = lecturer_df[col_map[key]]
-        if "field" not in lecturer_df.columns:
-            for alt in [col_map['lecturer_field'], "specialization", "department"]:
-                if alt in lecturer_df.columns:
-                    lecturer_df["field"] = lecturer_df[alt]
-        if "name" not in lecturer_df.columns:
-            validation_issues.append("Lecturer file must contain at least a 'name' column.")
-            lecturer_df = None
-        elif lecturer_df.duplicated(['name']).any():
-            validation_issues.append("Duplicate lecturer names found in lecturer file.")
-        elif lecturer_df.empty:
-            validation_issues.append("Lecturer file is empty.")
-            lecturer_df = None
-    except Exception as e:
-        validation_issues.append(f"Error reading lecturer file: {e}")
-        error_log.append(f"Lecturer file error: {e}")
-        lecturer_df = None
+# ---------- header ----------
+head, help_col = st.columns([5, 1], vertical_alignment="center")
+with head:
+    st.title(":material/school: Student–Lecturer Assignment")
+    st.caption("Upload a student list and a lecturer list. Get a fair, field-matched supervision list "
+               "you can review, adjust and export.")
+with help_col, st.popover("How it works", icon=":material/help:", width="stretch"):
+    st.markdown(f"""
+**1. Add your lists.** CSV, Excel or Word (first table). Headers are detected automatically,
+so *Name / Full name / Student*, *Matric / Reg No / Student ID*, *Field / Department / Specialization*
+all work. Lecturers can have a *Max_Students* column.
 
-if validation_issues:
-    st.warning("**Validation Issues:**\n" + "\n".join(f"- {issue}" for issue in validation_issues))
-st.markdown("---")
+**2. Choose a method.**
+- **Smart match** reads each student's field and each lecturer's specializations, scores how close they are
+  (it handles abbreviations like *AI*, typos and different wording), then finds the best overall
+  assignment while keeping workloads even.
+- **Random** spreads students evenly at random.
+
+**3. Review and export.** Change any lecturer in the table, then download Excel, PDF, Word or CSV.
+
+Match quality: **Strong** ≥ {STRONG:.0%}, **Partial** ≥ {PARTIAL:.0%}, otherwise **Weak**.
+
+Your files are processed in memory for this session only and are never stored.
+""")
 
 
-# Output Format
-st.header("Output Format")
-output_format = st.multiselect(
-    "Select Output Formats",
-    ["PDF", "Word", "CSV", "Excel"],
-    default=["PDF"]
-)
-st.markdown("---")
+# ---------- step 1: data ----------
+def load(kind, upload):
+    """Return (raw DataFrame, signature) for the uploaded file or the sample, else (None, None)."""
+    if upload is not None:
+        try:
+            return read_table(upload.name, upload.getvalue()), upload.file_id
+        except DataError as e:
+            st.error(str(e), icon=":material/error:")
+            return None, None
+    if ss.get("sample"):
+        return (samples.sample_students() if kind == "students" else samples.sample_lecturers()), "sample"
+    return None, None
 
-# Help/FAQ Section
-with st.expander("Help & FAQ"):
-    st.markdown("""
-    **Q: What file formats are supported?**  
-    A: CSV, Excel (.xlsx), and Word (.docx) for both students and lecturers.
 
-    **Q: What columns are required?**  
-    A: Students: Name, Matric Number. Lecturers: Name. Field/Department/Specialization is optional but needed for field-based assignment.
+def pick(label, df, kind, sig, key, optional=False, exclude=()):
+    cols = list(df.columns)
+    guess = detect_column(cols, kind, exclude)
+    options = ([NONE] if optional else []) + cols
+    index = options.index(guess) if guess in options else 0
+    choice = st.selectbox(label, options, index=index, key=f"{key}_{sig}")
+    return None if choice == NONE else choice
 
-    **Q: Can I use my own column names?**  
-    A: Yes! Use the 'Column Mapping (Advanced)' section to map your file's columns to the required fields.
 
-    **Q: What does 'Download All' do?**  
-    A: It creates a ZIP file containing all selected report formats for easy download.
+def prepare_students(raw, sig):
+    with st.expander("Columns", icon=":material/table_chart:"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            name = pick("Name", raw, "name", sig, "s_name")
+        with c2:
+            matric = pick("Matric / ID", raw, "matric", sig, "s_matric", exclude=[name])
+        with c3:
+            field = pick("Field (optional)", raw, "field", sig, "s_field", optional=True, exclude=[name, matric])
+        st.dataframe(raw.head(50), hide_index=True, height=220)
+    df = pd.DataFrame({"name": raw[name], "matric": raw[matric], "field": raw[field] if field else ""})
+    df = df[df["name"] != ""].reset_index(drop=True)
+    problems = []
+    if name == matric:
+        problems.append("Name and Matric / ID can't be the same column.")
+    if (df["matric"] == "").any():
+        problems.append(f"{(df['matric'] == '').sum()} student(s) have no matric number.")
+    dups = df.loc[df["matric"].duplicated() & (df["matric"] != ""), "matric"].unique()
+    if len(dups):
+        problems.append(f"Duplicate matric numbers: {', '.join(dups[:5])}{'…' if len(dups) > 5 else ''}")
+    return df, problems
 
-    **Q: How do I filter or search the assignment preview?**  
-    A: Use the search box above the preview table to filter by student name, matric number, or lecturer.
 
-    **Q: What if I see validation issues?**  
-    A: Check your file columns and data for errors, then re-upload. Details will be shown above.
+def prepare_lecturers(raw, sig):
+    with st.expander("Columns", icon=":material/table_chart:"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            name = pick("Name", raw, "name", sig, "l_name")
+        with c2:
+            field = pick("Specialization (optional)", raw, "field", sig, "l_field", optional=True, exclude=[name])
+        with c3:
+            cap = pick("Max students (optional)", raw, "capacity", sig, "l_cap", optional=True, exclude=[name, field])
+        st.dataframe(raw.head(50), hide_index=True, height=220)
+    df = pd.DataFrame({"name": raw[name], "field": raw[field] if field else "",
+                       "capacity": [parse_capacity(v) for v in raw[cap]] if cap else None})
+    df = df[df["name"] != ""].reset_index(drop=True)
+    problems = []
+    dups = df.loc[df["name"].duplicated(), "name"].unique()
+    if len(dups):
+        problems.append(f"Duplicate lecturer names: {', '.join(dups[:5])}{'…' if len(dups) > 5 else ''}")
+    return df, problems
 
-    **Q: How do I get help with errors?**  
-    A: If any errors occur, a 'Download Error Log' button will appear so you can download and review the error details.
 
-    **Q: Is this app accessible?**  
-    A: Yes! The app uses larger, high-contrast headers and clear help text for better readability. Let us know if you need further accessibility improvements.
-    """)
-
-# Assignment Generation
-st.markdown('<h2 style="font-size:2rem;color:#1a237e;">Generate Assignment</h2>', unsafe_allow_html=True)
-if st.button("Generate Assignment", key="generate_btn"):
-    if student_df is None or lecturer_df is None:
-        st.warning("Please upload both student and lecturer files.")
-    elif not output_format:
-        st.warning("Please select at least one output format.")
-    else:
-        mode = "field" if assignment_strategy == "Field-Based Assignment" else "random"
-        if mode == "field":
-            if "field" not in student_df.columns:
-                st.error("Field-based assignment requires a 'field' column in the student file.")
-                st.stop()
-            if "field" not in lecturer_df.columns:
-                st.error("Field-based assignment requires a 'field' column in the lecturer file.")
-                st.stop()
-        # Progress spinner
-        with st.spinner("Assigning students to lecturers and generating reports..."):
-            try:
-                assignment_flat = assign_students(student_df, lecturer_df, mode, max_students)
-            except Exception as e:
-                error_log.append(f"Assignment error: {e}")
-                st.error(f"Assignment failed: {e}")
-                assignment_flat = None
-        if assignment_flat is not None and not assignment_flat.empty:
-            # Assignment summary
-            total_students = len(student_df)
-            total_assigned = len(assignment_flat)
-            total_unassigned = total_students - total_assigned
-            total_lecturers = len(assignment_flat['assigned lecturer'].unique())
-            st.success(f"Assignment complete.\n\n**Summary:**\n- Total students: {total_students}\n- Assigned: {total_assigned}\n- Unassigned: {total_unassigned}\n- Lecturers: {total_lecturers}")
-            # Search/filter in preview
-            st.markdown("**Preview of first 20 students (search/filter below):**")
-            search_term = st.text_input("Search by student name, matric number, or lecturer", "", key="search_box")
-            preview_df = assignment_flat.copy()
-            if search_term:
-                search_term_lower = search_term.lower()
-                preview_df = preview_df[
-                    preview_df['student name'].str.lower().str.contains(search_term_lower) |
-                    preview_df['matric number'].astype(str).str.lower().str.contains(search_term_lower) |
-                    preview_df['assigned lecturer'].str.lower().str.contains(search_term_lower)
-                ]
-            st.dataframe(preview_df.head(20))
-            # Collated View: Grouped by Lecturer
-            st.markdown("#### Collated View (by Lecturer)")
-            for lecturer, group in assignment_flat.groupby("assigned lecturer"):
-                st.markdown(f"**{lecturer}:**")
-                students_list = [f"{row['student name']} ({row['matric number']})" for _, row in group.iterrows()]
-                st.markdown("\n".join([f"- {student}" for student in students_list]))
-                st.markdown("---")
-            unassigned = student_df[~student_df["matric number"].isin(assignment_flat["matric number"])]
-            if not unassigned.empty:
-                st.warning(f"{len(unassigned)} students could not be assigned.")
-                st.dataframe(unassigned)
-            # Download All Reports as ZIP
-            import zipfile, io
-            if len(output_format) > 1:
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w") as zipf:
-                    for fmt in output_format:
-                        try:
-                            report_bytes, mime, file_name = generate_report(fmt, assignment_flat)
-                            zipf.writestr(file_name, report_bytes)
-                        except Exception as e:
-                            error_log.append(f"Report ({fmt}) error: {e}")
-                            st.error(f"Failed to generate {fmt.upper()} report: {e}")
-                st.download_button("Download All Reports (ZIP)", data=zip_buffer.getvalue(), file_name="assignment_reports.zip", mime="application/zip")
-            # Individual report downloads
-            for fmt in output_format:
-                try:
-                    report_bytes, mime, file_name = generate_report(fmt, assignment_flat)
-                    st.download_button(f"Download {fmt.upper()}", data=report_bytes, file_name=file_name, mime=mime)
-                except Exception as e:
-                    error_log.append(f"Report ({fmt}) error: {e}")
-                    st.error(f"Failed to generate {fmt.upper()} report: {e}")
+with st.container(border=True):
+    top, sample_col = st.columns([3, 2], vertical_alignment="center")
+    with top:
+        step(1, "Add your lists")
+    with sample_col:
+        b1, b2 = st.columns(2)
+        if ss.get("sample"):
+            b1.button("Clear sample", icon=":material/close:", width="stretch",
+                      on_click=lambda: ss.update(sample=False, result=None))
         else:
-            st.error("No assignments were generated. Please check your data and try again.")
-    # Error Logging: Download log if any errors
-    if error_log:
-        import io
-        log_bytes = io.StringIO("\n".join(error_log)).getvalue().encode()
-        st.download_button("Download Error Log", data=log_bytes, file_name="assignment_error_log.txt", mime="text/plain")
+            b1.button("Try sample data", icon=":material/science:", width="stretch",
+                      on_click=lambda: ss.update(sample=True))
+        with b2.popover("Templates", icon=":material/download:", width="stretch"):
+            for kind in ("students", "lecturers"):
+                st.markdown(f"**{kind.title()}**")
+                for c, (fmt, label) in zip(st.columns(3), [("csv", "CSV"), ("xlsx", "Excel"), ("docx", "Word")]):
+                    c.download_button(label, samples.template(kind, fmt), f"{kind}_template.{fmt}",
+                                      key=f"tpl_{kind}_{fmt}", on_click="ignore", width="stretch")
 
-st.markdown(
-    '''
-    <style>
-    /* Make tables scrollable on mobile */
-    .css-1lcbmhc, .stDataFrame { overflow-x: auto; }
-    /* Button styling (Generate Assignment and others) */
-    .stButton>button {
-        font-size: 1.1rem;
-        padding: 0.6em 1.5em;
-        border-radius: 6px;
-        background-color: #636EFA;
-        color: #fff;
-        border: none;
-        transition: background 0.2s;
-        box-shadow: 0 2px 8px rgba(99,110,234,0.08);
-    }
-    .stButton>button:hover {
-        background-color: #4a5bdc;
-    }
-    /* Multiselect (format selection) styling */
-    .stMultiSelect [data-baseweb="tag"] {
-        background-color: #636EFA !important;
-        color: #fff !important;
-        border-radius: 4px !important;
-    }
-    .stMultiSelect [data-baseweb="tag"]:hover {
-        background-color: #4a5bdc !important;
-    }
-    /* Input styling */
-    .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        font-size: 1.05rem;
-        border-radius: 5px;
-        border: 1px solid #b0bec5;
-        padding: 0.5em;
-    }
-    /* Headings */
-    h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-        font-family: 'Segoe UI', 'Arial', sans-serif;
-        font-weight: 700;
-        color: #636EFA;
-    }
-    /* Headings: clearer color in dark mode */
-    @media (prefers-color-scheme: dark) {
-        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-            color: #aab6fe !important;
-        }
-    }
-    /* Section spacing */
-    .block-container {
-        padding-top: 2.5rem; /* Increased top padding so title is not cut off */
-        padding-bottom: 1.5rem;
-    }
-    /* Responsive font for mobile */
-    @media (max-width: 600px) {
-        h1, h2, h3 { font-size: 6vw; }
-        .block-container { padding: 1.5rem 0.5rem 0.5rem 0.5rem; }
-    }
-    </style>
-    ''',
-    unsafe_allow_html=True
-)
+    left, right = st.columns(2, gap="large")
+    students = lecturers = None
+    problems = []
+    with left:
+        st.markdown("**Students**")
+        up = st.file_uploader("Student list", type=["csv", "xlsx", "docx"], label_visibility="collapsed",
+                              help="Needs a name and a matric number column. A field/department column enables smart matching.")
+        raw, sig = load("students", up)
+        if raw is not None:
+            students, p = prepare_students(raw, sig)
+            problems += p
+            st.caption(f"{len(students)} students · {students['field'].replace('', pd.NA).nunique()} fields"
+                       + (" · sample data" if sig == "sample" else ""))
+    with right:
+        st.markdown("**Lecturers**")
+        up = st.file_uploader("Lecturer list", type=["csv", "xlsx", "docx"], label_visibility="collapsed",
+                              help="Needs a name column. Specialization and Max_Students columns are optional.")
+        raw, sig = load("lecturers", up)
+        if raw is not None:
+            lecturers, p = prepare_lecturers(raw, sig)
+            problems += p
+            st.caption(f"{len(lecturers)} lecturers" + (" · sample data" if sig == "sample" else ""))
+    for p in problems:
+        st.warning(p, icon=":material/warning:")
+
+ready = students is not None and lecturers is not None and not problems and len(students) and len(lecturers)
+
+# ---------- step 2: settings ----------
+with st.container(border=True):
+    step(2, "Choose how to match")
+    c1, c2, c3 = st.columns([2, 1.3, 1.3], gap="large")
+    with c1:
+        method = st.segmented_control("Method", ["Smart match", "Random"], default="Smart match",
+                                      required=True, width="stretch")
+        has_fields = ready and (students["field"] != "").any() and (lecturers["field"] != "").any()
+        if method == "Smart match" and ready and not has_fields:
+            st.caption(":material/info: No field columns found, so this will behave like an even random split.")
+        else:
+            st.caption("Pairs students with lecturers in the closest field, keeping workloads even."
+                       if method == "Smart match" else "Spreads students evenly, ignoring fields.")
+    with c2:
+        global_max = st.number_input("Max students per lecturer", min_value=0, value=0, step=1,
+                                     help="0 = split evenly. Limits in the lecturer file take priority.")
+    with c3:
+        min_pct = st.slider("Minimum match", 0, 100, 0, step=5, format="%d%%",
+                            disabled=method != "Smart match",
+                            help="Leave a student unassigned rather than give them a lecturer below this match.")
+    if ready:
+        total = sum(capacities(lecturers, len(students), global_max or None))
+        if total < len(students):
+            st.warning(f"Lecturer limits add up to {total} places for {len(students)} students. "
+                       f"{len(students) - total} will be left unassigned.", icon=":material/warning:")
+
+    settings = (method, global_max, min_pct)
+    if st.button("Assign students", type="primary", icon=":material/auto_awesome:", width="stretch",
+                 disabled=not ready):
+        with st.spinner("Matching…"):
+            ss.result = assign(students, lecturers, "smart" if method == "Smart match" else "random",
+                               global_max=global_max or None, min_score=min_pct / 100)
+        t = ss.result["table"]
+        order = t["match"].map({"Unassigned": 0, "Weak": 1, "Partial": 2}).fillna(3)
+        ss.table = t.assign(_o=order).sort_values(["_o", "lecturer", "name"]).drop(columns="_o").reset_index(drop=True)
+        ss.editor_v = ss.get("editor_v", 0) + 1
+        ss.inputs = (students.to_json(), lecturers.to_json(), settings)
+    if not ready and students is None and lecturers is None:
+        st.caption("Add both lists (or try the sample data) to continue.")
+
+# ---------- step 3: results ----------
+if ss.get("result") is not None:
+    result, table = ss.result, ss.table
+    if ready and ss.get("inputs") != (students.to_json(), lecturers.to_json(), settings):
+        st.info("Your data or settings changed. Press **Assign students** again to update.", icon=":material/info:")
+
+    with st.container(border=True):
+        step(3, "Review & export")
+        n = len(table)
+        assigned = (table["lecturer"] != "").sum()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Assigned", f"{assigned} / {n}", border=True)
+        m2.metric("Unassigned", n - assigned, border=True)
+        if result["has_fields"]:
+            m3.metric("Strong matches", f"{(table['match'] == 'Strong').mean():.0%}", border=True)
+            m4.metric("Average match", f"{table['score'].mean():.0%}" if assigned else "–", border=True)
+        else:
+            m3.metric("Lecturers used", table.loc[table['lecturer'] != '', 'lecturer'].nunique(), border=True)
+            loads = table[table["lecturer"] != ""]["lecturer"].value_counts()
+            m4.metric("Load range", f"{loads.min()}–{loads.max()}" if len(loads) else "–", border=True)
+
+        cols = st.columns(len(reports.FORMATS))
+        for c, (fmt, (ext, mime)) in zip(cols, reports.FORMATS.items()):
+            c.download_button(f"Download {fmt}", lambda f=fmt, t=table: reports.build(f, t),
+                              f"assignments.{ext}", mime, key=f"dl_{fmt}", on_click="ignore",
+                              icon=":material/download:", width="stretch",
+                              type="primary" if fmt == "Excel" else "secondary")
+
+        tab_edit, tab_lect, tab_load = st.tabs([":material/edit: Review & edit", ":material/groups: By lecturer",
+                                                ":material/bar_chart: Workload"])
+        lect_names = list(result["caps"])
+
+        def apply_edits():
+            edits = ss[f"editor_{ss.editor_v}"]["edited_rows"]
+            t = ss.table.copy()
+            for pos, change in edits.items():
+                if "lecturer" in change:
+                    t.loc[t.index[int(pos)], "lecturer"] = change["lecturer"] or ""
+            ss.table = rescore(t, result)
+            ss.editor_v += 1
+
+        with tab_edit:
+            st.caption("Rows needing attention are listed first. Change a lecturer from the dropdown; "
+                       "scores and exports update instantly. Use the table's search icon to find a student.")
+            st.data_editor(
+                table, key=f"editor_{ss.editor_v}", on_change=apply_edits, hide_index=True, height=440,
+                disabled=["name", "matric", "field", "lecturer_field", "score", "match"],
+                column_order=["match", "name", "matric", "field", "lecturer", "score"],
+                column_config={
+                    "match": st.column_config.TextColumn("Match", width="small"),
+                    "name": "Student", "matric": "Matric No.", "field": "Student field",
+                    "lecturer": st.column_config.SelectboxColumn("Lecturer", options=lect_names, width="medium"),
+                    "score": st.column_config.ProgressColumn("Score", min_value=0, max_value=1, format="percent"),
+                })
+
+        with tab_lect:
+            for lec in sorted(lect_names, key=str.lower):
+                group = table[table["lecturer"] == lec]
+                cap = result["caps"][lec]
+                label = f"{lec} · {len(group)}/{cap}" + (" · over limit" if len(group) > cap else "")
+                with st.expander(label, icon=":material/person:"):
+                    if result["lecturer_fields"].get(lec):
+                        st.caption(result["lecturer_fields"][lec])
+                    if group.empty:
+                        st.caption("No students assigned.")
+                    else:
+                        st.dataframe(group[["name", "matric", "field", "match"]], hide_index=True,
+                                     column_config={"name": "Student", "matric": "Matric No.",
+                                                    "field": "Field", "match": "Match"})
+            un = table[table["lecturer"] == ""]
+            if len(un):
+                with st.expander(f"Unassigned · {len(un)}", icon=":material/person_off:", expanded=True):
+                    st.dataframe(un[["name", "matric", "field"]], hide_index=True,
+                                 column_config={"name": "Student", "matric": "Matric No.", "field": "Field"})
+
+        with tab_load:
+            load = pd.DataFrame({"Lecturer": lect_names,
+                                 "Assigned": [int((table["lecturer"] == l).sum()) for l in lect_names],
+                                 "Limit": [result["caps"][l] for l in lect_names]})
+            load["Load"] = load["Assigned"] / load["Limit"]
+            st.dataframe(load.sort_values("Load", ascending=False), hide_index=True,
+                         column_config={"Load": st.column_config.ProgressColumn(
+                             "Load", min_value=0, max_value=1, format="percent")})
+            if (load["Load"] > 1).any():
+                st.warning("Some lecturers are over their limit after manual edits.", icon=":material/warning:")

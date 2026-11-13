@@ -1,109 +1,89 @@
-import random
+"""Assign students to lecturers.
+
+Both modes solve one optimal assignment (Hungarian algorithm) over lecturer "slots":
+  - smart:  maximise total field similarity (see utils.matcher), workloads kept even
+  - random: random preferences, workloads kept even
+Each extra slot a lecturer fills costs a little, so ties spread students evenly.
+"""
+import math
+
+import numpy as np
 import pandas as pd
+from scipy.optimize import linear_sum_assignment
 
-def assign_students(student_df, lecturer_df, mode="random", max_per_lecturer=None):
+from utils.matcher import similarity_matrix
+
+STRONG, PARTIAL = 0.75, 0.40
+_BLOCKED = 1e6
+
+
+def match_label(score, has_fields: bool) -> str:
+    if not has_fields or pd.isna(score):
+        return "No field data"
+    return "Strong" if score >= STRONG else "Partial" if score >= PARTIAL else "Weak"
+
+
+def capacities(lecturers: pd.DataFrame, n_students: int, global_max=None) -> list[int]:
+    """Per-lecturer limit: own value from the file, else the global max, else an even share."""
+    fair = math.ceil(n_students / max(len(lecturers), 1))
+    default = global_max or fair
+    return [int(c) if pd.notna(c) and c else default for c in lecturers["capacity"]]
+
+
+def assign(students: pd.DataFrame, lecturers: pd.DataFrame, mode="smart",
+           global_max=None, min_score=0.0, seed=None) -> dict:
     """
-    Assigns students to lecturers based on the selected mode.
-    :param student_df: DataFrame with student data
-    :param lecturer_df: DataFrame with lecturer data
-    :param mode: "random" or "field"
-    :param max_per_lecturer: maximum number of students per lecturer
-    :return: DataFrame with assignments
+    students:  columns name, matric, field
+    lecturers: columns name, field, capacity (int or None)
+    Returns {"table": one row per student, "scores": student x lecturer DataFrame, "caps": {lecturer: cap}}.
     """
-    if mode == "field":
-        return assign_by_field(student_df, lecturer_df, max_per_lecturer)
-    else:
-        return assign_random(student_df, lecturer_df, max_per_lecturer)
+    n, m = len(students), len(lecturers)
+    if n == 0 or m == 0:
+        raise ValueError("Need at least one student and one lecturer.")
+    rng = np.random.default_rng(seed)
+    caps = capacities(lecturers, n, global_max)
+    has_fields = bool((students["field"] != "").any() and (lecturers["field"] != "").any())
+    scores = similarity_matrix(students["field"], lecturers["field"]) if has_fields else np.zeros((n, m))
 
-def assign_random(student_df, lecturer_df, max_per_lecturer=None):
-    students = student_df.copy()
-    lecturers = lecturer_df.copy()
-    lecturer_names = lecturers["name"].tolist()
-    assignments = {lecturer: [] for lecturer in lecturer_names}
+    # shortcut: slots per lecturer capped at 3x the even share to bound matrix size;
+    # only matters if one lecturer should take >3x their share. Use min-cost flow if that bites.
+    slot_cap = min(n, 3 * math.ceil(n / m) + 1)
+    slot_owner = np.repeat(np.arange(m), [min(c, slot_cap) for c in caps])
+    slot_rank = np.concatenate([np.arange(min(c, slot_cap)) for c in caps])
 
-    if max_per_lecturer is None:
-        max_per_lecturer = len(students) // len(lecturer_names) + 1
+    pref = scores if mode == "smart" else np.zeros((n, m))
+    noise = rng.random((n, m)) * 1e-6  # random tie-breaks; this is all "random" mode uses
+    load_penalty = 0.01 * slot_rank / max(slot_rank.max(initial=0), 1)
+    cost = -(pref + noise)[:, slot_owner] + load_penalty
+    if mode == "smart" and has_fields and min_score > 0:
+        cost[scores[:, slot_owner] < min_score] = _BLOCKED
 
-    student_indices = list(students.index)
-    random.shuffle(student_indices)
+    rows, cols = linear_sum_assignment(cost)
+    chosen = {r: slot_owner[c] for r, c in zip(rows, cols) if cost[r, c] < _BLOCKED}
 
-    for student_idx in student_indices:
-        assigned = False
-        random.shuffle(lecturer_names)
+    lect_names = lecturers["name"].tolist()
+    table = students[["name", "matric", "field"]].copy().reset_index(drop=True)
+    table["lecturer"] = [lect_names[chosen[i]] if i in chosen else "" for i in range(n)]
+    lect_fields = dict(zip(lecturers["name"], lecturers["field"]))
+    table["lecturer_field"] = table["lecturer"].map(lect_fields).fillna("")
+    table["score"] = [scores[i, chosen[i]] if i in chosen and has_fields else np.nan for i in range(n)]
+    table["match"] = [match_label(s, has_fields) if lec else "Unassigned"
+                      for s, lec in zip(table["score"], table["lecturer"])]
 
-        for lecturer in lecturer_names:
-            if len(assignments[lecturer]) < max_per_lecturer:
-                assignments[lecturer].append(student_idx)
-                assigned = True
-                break
+    score_df = pd.DataFrame(scores, index=table["matric"], columns=lect_names)
+    return {"table": table, "scores": score_df, "caps": dict(zip(lect_names, caps)),
+            "lecturer_fields": lect_fields, "has_fields": has_fields}
 
-        if not assigned:
-            raise Exception("Not enough lecturer slots to assign all students.")
 
-    # Flatten the assignment into a DataFrame, including student and lecturer fields if present
-    records = []
-    for lecturer, indices in assignments.items():
-        # Get lecturer field if present
-        lecturer_field = ''
-        if "field" in lecturers.columns:
-            match = lecturers[lecturers["name"] == lecturer]
-            if not match.empty:
-                lecturer_field = match.iloc[0]["field"]
-        for idx in indices:
-            student = students.loc[idx]
-            record = {
-                "assigned lecturer": lecturer,
-                "lecturer field": lecturer_field,
-                "student name": student.get("name", ""),
-                "matric number": student.get("matric number", ""),
-                "student field": student.get("field", "")
-            }
-            records.append(record)
-
-    return pd.DataFrame(records)
-
-def assign_by_field(student_df, lecturer_df, max_per_lecturer=None):
-    students = student_df.copy()
-    lecturers = lecturer_df.copy()
-    # Normalize and check that both have a 'field' column
-    if "field" not in students.columns or "field" not in lecturers.columns:
-        raise ValueError("Both student and lecturer files must include a 'Field' column for field-based assignment.")
-
-    assignments = []
-
-    for field in students["field"].unique():
-        students_in_field = students[students["field"] == field]
-        lecturers_in_field = lecturers[lecturers["field"] == field]
-
-        if lecturers_in_field.empty:
-            continue  # No lecturer in this field
-
-        lecturer_list = lecturers_in_field["name"].tolist()
-        lecturer_capacity = {name: 0 for name in lecturer_list}
-
-        for _, student in students_in_field.iterrows():
-            random.shuffle(lecturer_list)
-            assigned = False
-
-            for lecturer in lecturer_list:
-                if max_per_lecturer is None or lecturer_capacity[lecturer] < max_per_lecturer:
-                    # Get lecturer field if present
-                    lecturer_field = ''
-                    match = lecturers_in_field[lecturers_in_field["name"] == lecturer]
-                    if not match.empty:
-                        lecturer_field = match.iloc[0]["field"]
-                    assignments.append({
-                        "assigned lecturer": lecturer,
-                        "lecturer field": lecturer_field,
-                        "student name": student.get("name", ""),
-                        "matric number": student.get("matric number", ""),
-                        "student field": student.get("field", "")
-                    })
-                    lecturer_capacity[lecturer] += 1
-                    assigned = True
-                    break
-
-            if not assigned:
-                raise Exception(f"No available lecturer slots for student '{student['name']}' in field '{field}'.")
-
-    return pd.DataFrame(assignments)
+def rescore(table: pd.DataFrame, result: dict) -> pd.DataFrame:
+    """Refresh lecturer field / score / match after manual edits to the lecturer column."""
+    scores, has_fields = result["scores"], result["has_fields"]
+    t = table.copy()
+    t["lecturer"] = t["lecturer"].fillna("")
+    t["lecturer_field"] = t["lecturer"].map(result["lecturer_fields"]).fillna("")
+    known = t["lecturer"].isin(scores.columns)
+    t["score"] = [scores.at[mat, lec] if ok and has_fields else np.nan
+                  for mat, lec, ok in zip(t["matric"], t["lecturer"], known)]
+    t["match"] = [match_label(s, has_fields) if lec else "Unassigned"
+                  for s, lec in zip(t["score"], t["lecturer"])]
+    return t

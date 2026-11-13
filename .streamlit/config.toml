@@ -1,7 +1,27 @@
+[server]
+maxUploadSize = 5               # MB; keep in sync with MAX_FILE_BYTES in utils/file_reader.py
+enableXsrfProtection = true
+enableCORS = true
+
+[client]
+showErrorDetails = "type"       # never show stack traces to users
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
 [theme]
-primaryColor = "#636EFA"
-backgroundColor = "#F8F9FA"
-secondaryBackgroundColor = "#EDEEF0"
-textColor = "#262730"
-font = "sans serif"
-favicon = "logo.png"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseRadius = "medium"
+
+[theme.light]
+primaryColor = "#1E3A8A"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F5F9"
+textColor = "#0F172A"
+
+[theme.dark]
+primaryColor = "#7AA2FF"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#141C2F"
+textColor = "#E2E8F0"
