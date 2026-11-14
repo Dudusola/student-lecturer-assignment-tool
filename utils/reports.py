@@ -7,11 +7,6 @@ import pandas as pd
 from docx import Document
 from docx.shared import Pt, RGBColor
 from openpyxl.styles import Alignment, Font, PatternFill
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 TITLE = "Student–Lecturer Assignment Report"
 BRAND = "#1E3A8A"
@@ -85,6 +80,13 @@ def _excel(table):
 
 
 def _pdf(table):
+    # imported here: the browser build downloads reportlab only when a PDF is asked for
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.6 * cm, rightMargin=1.6 * cm,
                             topMargin=1.6 * cm, bottomMargin=1.6 * cm, title=TITLE)

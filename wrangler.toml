@@ -1,0 +1,4 @@
+# Cloudflare Pages project. Build first: python build.py
+name = "supervision-list"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-08-01"

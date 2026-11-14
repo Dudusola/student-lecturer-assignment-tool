@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800;900&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap">
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -79,9 +80,10 @@
       <button type="button" class="link" id="sample">Try it with sample lists</button>
       <span aria-hidden="true">·</span>
       <span>Templates: students
-        <a href="/api/template/students.csv">CSV</a> <a href="/api/template/students.xlsx">Excel</a> <a href="/api/template/students.docx">Word</a>;
+        <button type="button" class="link" data-template="students.csv">CSV</button> <button type="button" class="link" data-template="students.xlsx">Excel</button> <button type="button" class="link" data-template="students.docx">Word</button>;
         lecturers
-        <a href="/api/template/lecturers.csv">CSV</a> <a href="/api/template/lecturers.xlsx">Excel</a> <a href="/api/template/lecturers.docx">Word</a></span>
+        <button type="button" class="link" data-template="lecturers.csv">CSV</button> <button type="button" class="link" data-template="lecturers.xlsx">Excel</button> <button type="button" class="link" data-template="lecturers.docx">Word</button></span>
+      <span class="engine" id="engine" role="status">Getting the matcher ready…</span>
     </p>
 
     <section class="notice" id="notice" aria-labelledby="notice-h">
@@ -89,7 +91,7 @@
       <div class="notice-body">
         <p><strong>Fields are read the way people write them.</strong> “AI”, “Artificial Intelligence” and a misspelt “Machine learnig” all find the right lecturer. A lecturer can list several specializations separated by commas.</p>
         <p><strong>The whole list is solved at once.</strong> Every student goes to the closest-matching lecturer that still has room, and loads stay as even as the limits allow. Nobody is placed first-come, first-served.</p>
-        <p><strong>You have the last word.</strong> Weak matches are circled in blue biro. Click any name to move that student; the list, the counts and every export follow. Files are read in memory and never stored.</p>
+        <p><strong>You have the last word.</strong> Weak matches are circled in blue biro. Click any name to move that student; the list, the counts and every export follow. Your files never leave this computer: everything runs in your browser.</p>
       </div>
     </section>
 
@@ -122,7 +124,7 @@
   </div>
 
   <footer class="colophon">
-    <p>Set by field similarity (character n-grams with acronym expansion) and solved as one optimal assignment. Strong ≥ 75%, partial ≥ 40%. Your files are processed in memory and are never kept.</p>
+    <p>Set by field similarity (character n-grams with acronym expansion) and solved as one optimal assignment. Strong ≥ 75%, partial ≥ 40%. Runs entirely in your browser; no file is uploaded anywhere.</p>
   </footer>
 </body>
 </html>

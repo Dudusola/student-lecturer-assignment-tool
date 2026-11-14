@@ -20,16 +20,66 @@ const label = (score, hasFields) =>
 
 $("#today").textContent = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
-// ---------- loading files ----------
-async function api(path, opts) {
-  const res = await fetch(path, opts);
-  if (!res.ok) {
-    let msg = `Something went wrong (${res.status}).`;
-    try { const d = (await res.json()).detail; msg = typeof d === "string" ? d : "Some values are invalid or too long."; } catch {}
-    throw new Error(msg);
+// ---------- the Python engine (Pyodide) ----------
+// utils/ runs in the browser, so files are never uploaded. Downloads are cached after the first visit.
+const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
+const engineNote = (text, cls = "") => { const n = $("#engine"); n.textContent = text; n.className = "engine " + cls; };
+const wheelUrls = async (pick) => {
+  const all = await (await fetch("/wheels/index.json")).json();
+  return all.filter(pick).map((w) => new URL(`/wheels/${w}`, location.href).href);
+};
+const engine = (async () => {
+  engineNote("Getting the matcher ready… the first visit downloads about 20 MB.");
+  const py = await loadPyodide({ indexURL: PYODIDE });
+  await py.loadPackage(["numpy", "pandas", "lxml", "typing-extensions", "micropip"]);
+  const urls = await wheelUrls((w) => !w.startsWith("reportlab"));
+  await py.pyimport("micropip").install.callKwargs(py.toPy(urls), { deps: false });
+  py.unpackArchive(await (await fetch("/py/utils.zip")).arrayBuffer(), "zip");
+  engineNote("Ready. Your files stay on this computer.", "is-ready");
+  return py;
+})();
+engine.catch(() => engineNote("The matcher couldn’t load. Check your connection and reload the page.", "is-error"));
+// scipy (the solver) is fetched in the background as soon as the basics are in.
+const solver = engine.then(async (py) => { await py.loadPackage("scipy"); return py; });
+let printer = null;  // PDF support, fetched on the first PDF export
+const exporter = () => (printer ??= engine.then(async (py) => {
+  await py.loadPackage(["pillow", "charset-normalizer"]);
+  await py.pyimport("micropip").install.callKwargs(py.toPy(await wheelUrls((w) => w.startsWith("reportlab"))), { deps: false });
+  return py;
+}));
+
+async function pycall(ready, fn, ...args) {
+  const py = await ready;
+  const svc = py.pyimport("utils.service");
+  const pyArgs = args.map((a) => (a == null ? a : py.toPy(a)));
+  try {
+    const out = svc[fn](...pyArgs);
+    if (out == null || typeof out !== "object") return out;
+    const js = out.toJs({ dict_converter: Object.fromEntries, create_pyproxies: false });
+    out.destroy();
+    return js;
+  } catch (e) {
+    const last = String(e.message || e).trim().split("\n").pop();
+    const known = /^(?:\w+\.)*(?:DataError|ValueError): (.+)$/.exec(last);
+    throw new Error(known ? known[1] : "Something went wrong. Check the file and try again.");
+  } finally {
+    pyArgs.forEach((a) => a?.destroy?.());
+    svc.destroy();
   }
-  return res;
 }
+
+const MIME = {
+  csv: "text/csv", pdf: "application/pdf",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+function download(bytes, name, ext) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: MIME[ext] }));
+  el("a", { href: url, download: name }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ---------- loading files ----------
 
 function setTable(kind, table) {
   state[kind] = { ...table, map: { ...table.detected } };
@@ -45,9 +95,7 @@ async function loadFile(kind, file) {
   if (file.size > 5 * 1024 * 1024) { $(".error", slot).textContent = "That file is over 5 MB."; return; }
   drop.classList.add("is-busy");
   try {
-    const body = new FormData();
-    body.append("file", file);
-    setTable(kind, await (await api("/api/read", { method: "POST", body })).json());
+    setTable(kind, await pycall(engine, "read_upload", file.name, new Uint8Array(await file.arrayBuffer())));
     state[kind].fileName = file.name;
     renderSlot(kind);
   } catch (e) {
@@ -71,7 +119,7 @@ for (const slot of document.querySelectorAll(".slot")) {
 
 $("#sample").addEventListener("click", async () => {
   try {
-    const s = await (await api("/api/sample")).json();
+    const s = await pycall(engine, "sample");
     setTable("students", s.students); setTable("lecturers", s.lecturers);
     state.students.fileName = state.lecturers.fileName = "sample";
     renderSlot("students"); renderSlot("lecturers");
@@ -176,10 +224,7 @@ form.addEventListener("submit", async (e) => {
   const students = rows("students"), lecturers = rows("lecturers"), s = settings();
   btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = "Setting the list…";
   try {
-    const r = await (await api("/api/assign", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ students, lecturers, ...s }),
-    })).json();
+    const r = await pycall(solver, "run_assign", students, lecturers, s.mode, s.global_max, s.min_score);
     state.result = {
       ...r, students, lecturers,
       names: lecturers.map((l) => l.name),
@@ -341,13 +386,8 @@ document.querySelectorAll("[data-export]").forEach((btn) => btn.addEventListener
   const fmt = btn.dataset.export;
   btn.setAttribute("aria-busy", "true");
   try {
-    const res = await api(`/api/export/${fmt}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: exportRows() }),
-    });
-    const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] || "supervision-list";
-    const url = URL.createObjectURL(await res.blob());
-    el("a", { href: url, download: name }).click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const ext = { Excel: "xlsx", PDF: "pdf", Word: "docx", CSV: "csv" }[fmt];
+    download(await pycall(fmt === "PDF" ? exporter() : engine, "export", fmt, exportRows()), `supervision-list.${ext}`, ext);
   } catch (e) {
     $("#press-counts").textContent = e.message;
   } finally {
@@ -355,5 +395,11 @@ document.querySelectorAll("[data-export]").forEach((btn) => btn.addEventListener
   }
 }));
 $("#print").addEventListener("click", () => window.print());
+
+document.querySelectorAll("[data-template]").forEach((btn) => btn.addEventListener("click", async () => {
+  const [kind, ext] = btn.dataset.template.split(".");
+  try { download(await pycall(engine, "template", kind, ext), `${kind}_template.${ext}`, ext); }
+  catch (e) { engineNote(e.message, "is-error"); }
+}));
 
 renderRules();

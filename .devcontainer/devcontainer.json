@@ -6,7 +6,7 @@
     "codespaces": {
       "openFiles": [
         "README.md",
-        "app.py"
+        "web/app.js"
       ]
     },
     "vscode": {
@@ -19,7 +19,7 @@
   },
   "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; echo '✅ Packages installed and Requirements met'",
   "postAttachCommand": {
-    "server": "uvicorn app:app --host 0.0.0.0 --port 8000"
+    "server": "python build.py && python -m http.server -d dist 8000"
   },
   "portsAttributes": {
     "8000": {

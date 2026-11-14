@@ -104,7 +104,10 @@ input[type="range"] { width: 100%; accent-color: var(--color-accent); }
 
 .desk-extras { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: baseline; padding: var(--space-sm) 0; font-size: var(--text-sm); color: var(--color-ink-2); border-bottom: var(--rule-hair) solid var(--color-rule); }
 .desk-extras .link { font-weight: 600; color: var(--color-ink); font-family: var(--font-display); }
-.desk-extras a { margin-right: var(--space-2xs); }
+.desk-extras [data-template] { margin-right: var(--space-2xs); }
+.engine { margin-left: auto; font-size: var(--text-xs); }
+.engine.is-ready { color: var(--color-accent); }
+.engine.is-error { color: var(--color-error); }
 
 /* ---------- notice (empty state) ---------- */
 .notice { padding: var(--space-lg) 0 var(--space-xl); }

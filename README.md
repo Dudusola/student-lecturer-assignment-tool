@@ -3,13 +3,16 @@
 A web app that turns a student list and a lecturer list into a fair, field-matched supervision list,
 set like a published allocation list: **drop two files → publish → fix anything circled → export.**
 
+**Live:** https://supervision-list.pages.dev — everything runs in your browser (Python via Pyodide),
+so no file is ever uploaded. The first visit downloads about 20 MB of Python libraries; later visits use the cache.
+
 ## Features
 
 - **Any common file:** CSV (comma, semicolon or tab), Excel `.xlsx`, or Word `.docx` (first table).
 - **Automatic column detection:** *Name / Full name*, *Matric / Reg No / Student ID*,
   *Field / Department / Specialization*, *Max_Students / Capacity* are recognised; you can override them.
 - **Smart match (ML):** each student's field is scored against each lecturer's specializations using
-  character n-gram TF-IDF embeddings with acronym expansion, so `AI` ↔ *Artificial Intelligence*,
+  character n-gram TF-IDF vectors (numpy) with acronym expansion, so `AI` ↔ *Artificial Intelligence*,
   `HCI` ↔ *Human-Computer Interaction* and typos like *Machine learnig* still match. The Hungarian algorithm
   then finds the best overall assignment while keeping workloads even and respecting every limit.
 - **Random (balanced):** even random split when fields don't matter.
@@ -26,29 +29,40 @@ set like a published allocation list: **drop two files → publish → fix anyth
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
-.venv/Scripts/uvicorn app:app --port 8000
+.venv/Scripts/python build.py                   # writes the static site to dist/
+.venv/Scripts/python -m http.server -d dist 8000
 ```
 
-Then open http://localhost:8000. Deploys anywhere that runs a Python web service (Render, Railway, Fly.io):
-start command `uvicorn app:app --host 0.0.0.0 --port $PORT`.
+Then open http://localhost:8000.
+
+## Deploy (Cloudflare Pages, free)
+
+```bash
+python build.py
+wrangler pages deploy dist --project-name supervision-list --branch main
+```
+
+`dist/` is plain static files: `web/`, our `utils/` code zipped for Pyodide, and four pure-Python wheels
+Pyodide doesn't ship (openpyxl, et-xmlfile, python-docx, reportlab). Pyodide itself and numpy, pandas,
+scipy and lxml come from the jsDelivr Pyodide CDN. Security headers live in `web/_headers`.
 
 Tests: `.venv/Scripts/python -m pytest -q`
 
 ## Security
 
 - Uploads are limited to 5 MB and 2,000 rows; Excel/Word files are checked for zip bombs before parsing.
-- Data is processed in memory for the session only; nothing is written to disk.
+- Files never leave the user's computer: parsing, matching and exports all run in the browser.
 - Exported CSV/Excel cells that start with `= + - @` are escaped to block spreadsheet formula injection.
 - User data is never rendered as HTML; PDF text is escaped.
-- The server is stateless: the browser holds the data; request bodies are size-capped and validated (Pydantic).
-- Strict Content-Security-Policy (no inline scripts), `nosniff`, no referrer, `no-store` on API responses,
-  API docs disabled.
+- Strict Content-Security-Policy (scripts only from this site and the pinned Pyodide CDN, no inline
+  scripts), `nosniff`, no referrer, no framing (`web/_headers`).
 
 ## Project layout
 
 ```
-app.py                 FastAPI server: JSON API + static frontend
-web/                   frontend (index.html, styles.css, tokens.css, app.js)
+build.py               builds dist/ for Cloudflare Pages
+web/                   frontend (index.html, styles.css, tokens.css, app.js, _headers)
+utils/service.py       the operations the page calls through Pyodide
 utils/file_reader.py   safe file parsing + column detection
 utils/matcher.py       field similarity (TF-IDF + acronym expansion)
 utils/assigner.py      optimal assignment with capacities

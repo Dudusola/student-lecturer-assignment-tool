@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Custom web frontend (hand-built HTML/CSS/JS) served by a small Python FastAPI backend that reuses the existing `utils/` matching, parsing and export modules. Chosen by the user 2026-11-13, replacing the Streamlit UI. Deploy target moves off Streamlit Community Cloud; host not yet decided.
+Custom web frontend (hand-built HTML/CSS/JS) that runs the Python `utils/` modules in the browser through Pyodide; no server. Hosted free on Cloudflare Pages at https://supervision-list.pages.dev (user's choice, 2026-11-13). Files never leave the user's computer.
 
 ## Users
 
@@ -28,7 +28,7 @@ Inputs are spreadsheets or Word tables exported from department records (CSV, XL
 
 ## Capabilities and Constraints
 
-- Upload validation: 5 MB, 2,000 rows, zip-bomb check; files processed in memory only, never stored.
+- Upload validation: 5 MB, 2,000 rows, zip-bomb check; files are processed in the browser and never uploaded.
 - Column auto-detection with manual override.
 - Smart match (TF-IDF char n-gram similarity, acronym expansion, Hungarian assignment with balanced load) and balanced random mode.
 - Limits: per-lecturer `Max_Students`, a global maximum, or an even split; optional minimum match.
